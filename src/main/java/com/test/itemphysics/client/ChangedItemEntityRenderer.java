@@ -55,35 +55,40 @@ public class ChangedItemEntityRenderer extends net.minecraft.client.renderer.ent
             for (int k = 0; k < amount; ++k) {
                 poseStack.pushPose();
                 try {
+                    long instSeed = (long)seed * 31L + k * 0x9E3779B97F4A7C15L;
+                    RandomSource instRand = RandomSource.create(instSeed);
 
-                    float spinDeg = spin.getInterpolated(partialTicks);
-                    float pitchDeg = spin.getPitchInterpolated(partialTicks);
+                    float spread = Math.max(0.32f, 0.32f + (amount - 1) * 0.02f);
+
+                    float angle = (float)(instRand.nextDouble() * Math.PI * 2.0);
+                    float radius = (float)(instRand.nextDouble() * spread);
+                    float dx = (float) (Math.cos(angle) * radius);
+                    float dz = (float) (Math.sin(angle) * radius);
+
+                    float extraSpin = (float)(instRand.nextDouble() * 12.0 - 6.0);
+                    float extraPitch = (float)(instRand.nextDouble() * 6.0 - 3.0);
+                    float instanceScale = 1.0f - (float)(instRand.nextDouble() * 0.06);
+
+                    poseStack.translate(dx, 0, dz);
+
+                    float spinDeg = spin.getInterpolated(partialTicks) + extraSpin;
+                    float pitchDeg = spin.getPitchInterpolated(partialTicks) + extraPitch;
+
+                    poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(spinDeg));
+                    poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(pitchDeg));
 
                     if (onGround) {
-                        poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(spinDeg));
-                        poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(pitchDeg));
-                        poseStack.translate(0.0, -0.15, 0.0);
-                        if (is3d) poseStack.translate(0, 0, -0.15);
-                    } else {
-                        poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(spinDeg));
-                        poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(pitchDeg));
+                        poseStack.translate(0.0, -0.15, is3d ? -0.08 : 0.0);
+                    }
+
+                    if (Math.abs(instanceScale - 1.0f) > 1e-6) {
+                        poseStack.scale(instanceScale, instanceScale, instanceScale);
                     }
 
                     try {
-                        if (entity.isInWater()) {
-
-                        } else {
-                            double dy = 0.0;
-
-                            if (Math.abs(dy) < 1e-4) dy = 0.0;
-
-                            spin.lastDy = net.minecraft.util.Mth.lerp(0.35f, spin.lastDy, dy);
-                            if (Math.abs(spin.lastDy) > 1e-6) {
-                                poseStack.translate(0.0, spin.lastDy, 0.0);
-                            }
+                        if (!entity.isInWater()) {
                         }
-                    } catch (Throwable ignored) {
-                    }
+                    } catch (Throwable ignored) {}
 
                     this.itemRenderer.render(
                             stack,
@@ -118,9 +123,9 @@ public class ChangedItemEntityRenderer extends net.minecraft.client.renderer.ent
         private static final float LEAP_BASE = 0.7f;
         private static final float LEAP_SCALE = 0.15f;
         private static final float LEAP_DECAY = 0.9f;
-        private static final float GROUND_STIFFNESS = 0.05f;
+        private static final float GROUND_STIFFNESS = 0.03f;
         private static final float GROUND_DAMPING = 0.65f;
-        private static final float AIR_STIFFNESS = 0.02f;
+        private static final float AIR_STIFFNESS = 0.01f;
         private static final float AIR_DAMPING = 0.25f;
         float spin = 0f;
         float spinVel = 0f;
@@ -166,11 +171,6 @@ public class ChangedItemEntityRenderer extends net.minecraft.client.renderer.ent
             float force = (target - this.pitch) * stiffness;
             this.pitchVel = this.pitchVel * (1.0f - damping) + force;
             this.pitch += this.pitchVel;
-
-            if (onGround) {
-                this.pitch = net.minecraft.util.Mth.lerp(SNAP_RATE, this.pitch, GROUND_PITCH_TARGET);
-                this.pitchVel *= 0.8f;
-            }
 
             if (this.spin > 36000f || this.spin < -36000f) this.spin %= 360f;
             if (this.pitch > 36000f || this.pitch < -36000f) this.pitch %= 360f;
