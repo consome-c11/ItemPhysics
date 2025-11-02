@@ -7,28 +7,20 @@ import net.minecraft.client.renderer.entity.ItemRenderer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.resources.model.BakedModel;
-import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.Map;
 import java.util.WeakHashMap;
 
 public class ChangedItemEntityRenderer extends net.minecraft.client.renderer.entity.ItemEntityRenderer {
+    private static final Map<ItemEntity, SpinData> SPIN_MAP = new WeakHashMap<>();
+    private static final float SNAP_RATE = 0.03f;
     private final ItemRenderer itemRenderer;
     private final RandomSource random;
-
-    private static final Map<ItemEntity, SpinData> SPIN_MAP = new WeakHashMap<>();
-    private static final float AIR_DRAG = 0.995f;
-    private static final float GROUND_DAMP = 0.6f;
-    private static final float GROUND_TARGET = 90.0f;
-    private static final float SNAP_RATE = 0.2f;
-    private static final int CLEAN_THRESHOLD = 2000;
 
     public ChangedItemEntityRenderer(EntityRendererProvider.Context ctx) {
         super(ctx);
@@ -63,45 +55,34 @@ public class ChangedItemEntityRenderer extends net.minecraft.client.renderer.ent
             for (int k = 0; k < amount; ++k) {
                 poseStack.pushPose();
                 try {
-                    if (is3d) {
-                        poseStack.translate(0.0, -0.05, 0.0);
+
+                    float spinDeg = spin.getInterpolated(partialTicks);
+                    float pitchDeg = spin.getPitchInterpolated(partialTicks);
+
+                    if (onGround) {
+                        poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(spinDeg));
+                        poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(pitchDeg));
+                        poseStack.translate(0.0, -0.15, 0.0);
+                        if (is3d) poseStack.translate(0, 0, -0.15);
                     } else {
-                        float spinDeg = spin.getInterpolated(partialTicks);
-                        float pitchDeg = spin.getPitchInterpolated(partialTicks);
+                        poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(spinDeg));
+                        poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(pitchDeg));
+                    }
 
-                        if (onGround) {
+                    try {
+                        if (entity.isInWater()) {
 
-                            poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(pitchDeg));
-                            poseStack.translate(0.0, -0.15, 0.0);
                         } else {
-                            poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(spinDeg));
-                            poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(pitchDeg));
-                        }
+                            double dy = 0.0;
 
-                        try {
-                            if (entity.isInWater()) {
+                            if (Math.abs(dy) < 1e-4) dy = 0.0;
 
-                            } else {
-                                double interpY = net.minecraft.util.Mth.lerp(partialTicks, entity.yOld, entity.getY());
-                                Level lvl = entity.level();
-                                if (lvl != null) {
-                                    BlockPos posBelow = BlockPos.containing(entity.getX(), interpY - 0.5, entity.getZ());
-                                    var state = lvl.getBlockState(posBelow);
-                                    if (!state.isAir()) {
-                                        VoxelShape shape = state.getShape(lvl, posBelow);
-                                        double topLocal = shape.max(net.minecraft.core.Direction.Axis.Y);
-                                        if (topLocal > 1e-3) {
-                                            double blockTopY = posBelow.getY() + topLocal;
-                                            double desiredY = blockTopY + 0.001;
-                                            double dy = desiredY - interpY;
-                                            if (Math.abs(dy) > 1e-6) {
-                                                poseStack.translate(0.0, dy, 0.0);
-                                            }
-                                        }
-                                    }
-                                }
+                            spin.lastDy = net.minecraft.util.Mth.lerp(0.35f, spin.lastDy, dy);
+                            if (Math.abs(spin.lastDy) > 1e-6) {
+                                poseStack.translate(0.0, spin.lastDy, 0.0);
                             }
-                        } catch (Throwable ignored) {}
+                        }
+                    } catch (Throwable ignored) {
                     }
 
                     this.itemRenderer.render(
@@ -130,34 +111,29 @@ public class ChangedItemEntityRenderer extends net.minecraft.client.renderer.ent
     }
 
     private static class SpinData {
-        float spin = 0f;
-        float spinVel = 0f;
-
-        float pitch = 0f;
-        float pitchVel = 0f;
-
-        boolean prevOnGround = false;
-        private int seedRand = 0;
-
-        private static final float AIR_PITCH_TARGET = 15.0f;
+        private static final float AIR_PITCH_TARGET = 70.0f;
         private static final float GROUND_PITCH_TARGET = 90.0f;
-
         private static final float AIR_DRAG = 0.995f;
         private static final float GROUND_DAMP = 0.6f;
-
-        private static final float LEAP_BASE = 3.0f;
-        private static final float LEAP_SCALE = 0.35f;
+        private static final float LEAP_BASE = 0.7f;
+        private static final float LEAP_SCALE = 0.15f;
         private static final float LEAP_DECAY = 0.9f;
-
         private static final float GROUND_STIFFNESS = 0.05f;
         private static final float GROUND_DAMPING = 0.65f;
         private static final float AIR_STIFFNESS = 0.02f;
         private static final float AIR_DAMPING = 0.25f;
+        float spin = 0f;
+        float spinVel = 0f;
+        float pitch = 0f;
+        float pitchVel = 0f;
+        boolean prevOnGround = false;
+        private double lastDy = 0.0;
+        private int seedRand = 0;
 
         void initSeed(int seed, int id) {
             this.seedRand = seed ^ id * 31;
             long v = (seedRand * 6364136223846793005L) >>> 48;
-            this.spinVel = (float)((v % 11) - 5) * 0.6f;
+            this.spinVel = (float) ((v % 11) - 5) * 0.6f;
             this.pitch = 0f;
             this.pitchVel = 0f;
             this.prevOnGround = false;
@@ -166,7 +142,7 @@ public class ChangedItemEntityRenderer extends net.minecraft.client.renderer.ent
         void update(boolean onGround) {
             if (!onGround) {
                 if (Math.abs(this.spinVel) < 0.01f) {
-                    this.spinVel = (float)((this.seedRand % 11) - 5) * 0.6f;
+                    this.spinVel = (float) ((this.seedRand % 11) - 5) * 0.6f;
                 }
                 this.spinVel *= AIR_DRAG;
                 this.spin += this.spinVel;
@@ -190,6 +166,11 @@ public class ChangedItemEntityRenderer extends net.minecraft.client.renderer.ent
             float force = (target - this.pitch) * stiffness;
             this.pitchVel = this.pitchVel * (1.0f - damping) + force;
             this.pitch += this.pitchVel;
+
+            if (onGround) {
+                this.pitch = net.minecraft.util.Mth.lerp(SNAP_RATE, this.pitch, GROUND_PITCH_TARGET);
+                this.pitchVel *= 0.8f;
+            }
 
             if (this.spin > 36000f || this.spin < -36000f) this.spin %= 360f;
             if (this.pitch > 36000f || this.pitch < -36000f) this.pitch %= 360f;
