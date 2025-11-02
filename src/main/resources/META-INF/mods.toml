@@ -1,0 +1,28 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+
+license="MIT"
+
+[[mods]]
+modId="itemphysics"
+version="${mod_version}"
+displayName="Item Physics"
+authors="${mod_authors}"
+description="""${mod_description}"""
+
+[[dependencies.itemphysics]]
+    modId="forge"
+    mandatory=true
+    versionRange="${forge_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.itemphysics]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[mixins]]
+  config = "itemphysics.mixins.json"

@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "com.test.itemphysics.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "itemphysics.refmap.json",
+  "mixins": [
+
+  ],
+  "client": [
+  ]
+}
