@@ -18,9 +18,8 @@ import java.util.WeakHashMap;
 
 public class ChangedItemEntityRenderer extends net.minecraft.client.renderer.entity.ItemEntityRenderer {
     private static final Map<ItemEntity, SpinData> SPIN_MAP = new WeakHashMap<>();
-    private static final float SNAP_RATE = 0.03f;
     private final ItemRenderer itemRenderer;
-    private final RandomSource random;
+    RandomSource random;
 
     public ChangedItemEntityRenderer(EntityRendererProvider.Context ctx) {
         super(ctx);
@@ -76,10 +75,7 @@ public class ChangedItemEntityRenderer extends net.minecraft.client.renderer.ent
 
                     poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(spinDeg));
                     poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(pitchDeg));
-
-                    if (onGround) {
-                        poseStack.translate(0.0, -0.15, is3d ? -0.08 : 0.0);
-                    }
+                    poseStack.translate(0.0, -0.15, is3d ? -0.15 : 0.0);
 
                     if (Math.abs(instanceScale - 1.0f) > 1e-6) {
                         poseStack.scale(instanceScale, instanceScale, instanceScale);
@@ -87,6 +83,7 @@ public class ChangedItemEntityRenderer extends net.minecraft.client.renderer.ent
 
                     try {
                         if (!entity.isInWater()) {
+                            //TODO: add inWater rotate?
                         }
                     } catch (Throwable ignored) {}
 
@@ -120,9 +117,6 @@ public class ChangedItemEntityRenderer extends net.minecraft.client.renderer.ent
         private static final float GROUND_PITCH_TARGET = 90.0f;
         private static final float AIR_DRAG = 0.995f;
         private static final float GROUND_DAMP = 0.6f;
-        private static final float LEAP_BASE = 0.7f;
-        private static final float LEAP_SCALE = 0.15f;
-        private static final float LEAP_DECAY = 0.9f;
         private static final float GROUND_STIFFNESS = 0.03f;
         private static final float GROUND_DAMPING = 0.65f;
         private static final float AIR_STIFFNESS = 0.01f;
@@ -132,39 +126,35 @@ public class ChangedItemEntityRenderer extends net.minecraft.client.renderer.ent
         float pitch = 0f;
         float pitchVel = 0f;
         boolean prevOnGround = false;
-        private double lastDy = 0.0;
         private int seedRand = 0;
-
+        private int age = 0;
         void initSeed(int seed, int id) {
             this.seedRand = seed ^ id * 31;
             long v = (seedRand * 6364136223846793005L) >>> 48;
+
             this.spinVel = (float) ((v % 11) - 5) * 0.6f;
-            this.pitch = 0f;
+
+            RandomSource rand = RandomSource.create(seedRand);
+            this.spin = rand.nextFloat() * 360f;
+
             this.pitchVel = 0f;
             this.prevOnGround = false;
         }
-
         void update(boolean onGround) {
-            if (!onGround) {
-                if (Math.abs(this.spinVel) < 0.01f) {
-                    this.spinVel = (float) ((this.seedRand % 11) - 5) * 0.6f;
-                }
-                this.spinVel *= AIR_DRAG;
-                this.spin += this.spinVel;
-            } else {
-                this.spinVel *= GROUND_DAMP;
-                this.spin += this.spinVel;
+            if (age == 0) {
+                this.spinVel = (float) ((this.seedRand % 11) - 5) * 0.35f;
             }
+
+            if (onGround) {
+                this.spinVel *= GROUND_DAMP;
+            } else {
+                this.spinVel *= AIR_DRAG;
+            }
+
+            this.spin += this.spinVel;
+            age++;
 
             float target = onGround ? GROUND_PITCH_TARGET : AIR_PITCH_TARGET;
-
-            if (!this.prevOnGround && onGround) {
-                float sign = Math.signum(this.spinVel);
-                float impulse = LEAP_BASE + Math.abs(this.spinVel) * LEAP_SCALE;
-                this.pitchVel += sign * impulse;
-                this.pitchVel *= LEAP_DECAY;
-            }
-
             float stiffness = onGround ? GROUND_STIFFNESS : AIR_STIFFNESS;
             float damping = onGround ? GROUND_DAMPING : AIR_DAMPING;
 
